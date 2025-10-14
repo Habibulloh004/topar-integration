@@ -6,15 +6,24 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/main.js",
-    "dev": "nodemon src/main.js"
+    "dev": "nodemon src/main.js",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:dev": "docker-compose --profile dev up",
+    "docker:clean": "docker-compose down -v",
+    "db:shell": "docker-compose exec mongodb mongosh -u topar_admin -p topar_password_2024 topar_db"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@faker-js/faker": "^10.0.0",
     "axios": "^1.11.0",
-    "dotenv": "^17.2.1"
+    "dotenv": "^17.2.1",
+    "mongodb": "^6.20.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
