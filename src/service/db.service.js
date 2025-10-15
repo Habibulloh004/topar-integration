@@ -385,7 +385,7 @@ export async function getStats() {
 }
 
 // Initialize connection on module load
-connect().catch(console.error);
+// connect().catch(console.error);
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

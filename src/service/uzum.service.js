@@ -8,6 +8,7 @@ const UZUM_URL = (
 ).replace(/\/$/, "");
 
 const uzumSecretKey = process.env.UZUM_SECRET_KEY;
+const shop_id = process.env.UZUM_SHOP_ID || "254";
 
 export async function getUzumProducts() {
   try {
@@ -16,7 +17,7 @@ export async function getUzumProducts() {
     const size = 200;
 
     // birinchi request
-    const firstRes = await axios.get(`${UZUM_URL}/v1/product/shop/254`, {
+    const firstRes = await axios.get(`${UZUM_URL}/v1/product/shop/${shop_id}`, {
       headers: {
         Authorization: uzumSecretKey, // agar kerak bo‘lsa "Bearer " qo‘shiladi
         "Content-Type": "application/json",
@@ -37,25 +38,31 @@ export async function getUzumProducts() {
     uzumProducts.push(...(firstRes.data.productList || []));
 
     // qolgan sahifalarni olish
-    // for (page = 1; page <= totalPages; page++) {
-    //   const res = await axios.get(`${UZUM_URL}/v1/product/shop/254`, {
-    //     headers: {
-    //       Authorization: uzumSecretKey,
-    //       "Content-Type": "application/json",
-    //     },
-    //     params: {
-    //       size,
-    //       page,
-    //     },
-    //   });
+    for (page = 1; page <= totalPages; page++) {
+      const res = await axios.get(`${UZUM_URL}/v1/product/shop/${shop_id}`, {
+        headers: {
+          Authorization: uzumSecretKey,
+          "Content-Type": "application/json",
+        },
+        params: {
+          size,
+          page,
+        },
+      });
 
-    //   console.log(`Fetched page ${page}, items: ${res.data.productList?.length || 0}`);
-    //   uzumProducts.push(...(res.data.productList || []));
-    // }
+      console.log(
+        `Fetched page ${page}, items: ${res.data.productList?.length || 0}`
+      );
+      uzumProducts.push(...(res.data.productList || []));
+    }
 
-    console.log(`Uzum mappings: fetched ${uzumProducts.length} items in total.`);
+    console.log(
+      `Uzum mappings: fetched ${uzumProducts.length} items in total.`
+    );
     if (uzumProducts.length !== totalProductsAmount) {
-      console.warn("Warning: fetched products count does not match totalProductsAmount!");
+      console.warn(
+        "Warning: fetched products count does not match totalProductsAmount!"
+      );
       return { uzumProducts, warning: "Fetched count mismatch" };
     } else {
       return { uzumProducts };
@@ -108,8 +115,7 @@ export function combineUzumSkuAndStock(skuItems = [], stock = []) {
       return acc;
     }
 
-    const priceValue =
-      skuItem?.price != null ? Number(skuItem.price) : null;
+    const priceValue = skuItem?.price != null ? Number(skuItem.price) : null;
 
     acc.push({
       skuId,
@@ -164,12 +170,10 @@ export function compareCollectWithBillz(collectData = [], billzProducts = []) {
     }
 
     const candidates = [
-      product?.skuId,
       product?.sku_id,
       product?.sku,
       product?.id,
       product?.product_id,
-      product?.productId,
       product?.external_id,
     ];
     for (const candidate of candidates) {
@@ -192,9 +196,7 @@ export function compareCollectWithBillz(collectData = [], billzProducts = []) {
     const barcode = barcodeValue != null ? String(barcodeValue) : null;
     const skuKey = normalizeSkuKey(uzumItem?.skuId);
 
-    const matched =
-      (barcode && billzByBarcode.get(barcode)) ||
-      (skuKey && billzBySku.get(skuKey));
+    const matched = barcode && billzByBarcode.get(barcode);
 
     const normalizedItem = {
       ...uzumItem,
@@ -269,17 +271,155 @@ export async function syncUzumOnlyProducts(database, items = []) {
   return { inserted, updated };
 }
 
-export async function changeUzumProductCount(data) {
-  
-  try {
-    const response = await axios.post(`${UZUM_URL}/v2/fbs/sku/stock`, data, {
-      headers: {
-        Authorization: uzumSecretKey, // agar kerak bo‘lsa "Bearer " qo‘shiladi
-        "Content-Type": "application/json",
-      },
+const buildUzumStockPayload = (items) => {
+  const skuAmountList = [];
+
+  for (const entry of Array.isArray(items) ? items : []) {
+    const skuIdRaw =
+      entry?.skuId ??
+      entry?.sku_id ??
+      entry?.id ??
+      entry?.product_id ??
+      entry?.productId ??
+      null;
+    const skuId = Number(skuIdRaw);
+    if (!Number.isFinite(skuId) || skuId <= 0) continue;
+
+    const amount = Number(entry?.needAmount ?? entry?.amount ?? 0);
+    if (!Number.isFinite(amount) || amount < 0) continue;
+
+    const skuTitle = (entry?.sku_title ?? entry?.skuTitle ?? "")
+      .toString()
+      .trim();
+    const productTitle = (entry?.productTitle ?? entry?.product_title ?? "")
+      .toString()
+      .trim();
+    const barcode = (
+      entry?.barcode_uzum ??
+      entry?.barcode ??
+      entry?.barcode_billz ??
+      ""
+    )
+      .toString()
+      .trim();
+
+    skuAmountList.push({
+      skuId: Math.trunc(skuId),
+      skuTitle,
+      productTitle,
+      barcode,
+      amount: Math.trunc(amount),
+      fbsLinked: true,
+      dbsLinked: true,
     });
-    return response.data; 
+  }
+
+  return { skuAmountList };
+};
+
+export async function changeUzumProductCount(items) {
+  const payload = buildUzumStockPayload(items);
+  if (!payload.skuAmountList.length) {
+    return null;
+  }
+
+  try {
+    const response = await axios.post(
+      `${UZUM_URL}/v2/fbs/sku/stocks`,
+      payload,
+      {
+        headers: {
+          Authorization: uzumSecretKey, // agar kerak bo‘lsa "Bearer " qo‘shiladi
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return response.data;
   } catch (error) {
-    
+    console.error(
+      "Failed to change Uzum product count:",
+      error.response?.data || error
+    );
+    throw error;
+  }
+}
+
+export async function changeUzumProductPrices(items) {
+  const itemsArray = Array.isArray(items) ? items.filter(Boolean) : [];
+  const grouped = new Map();
+
+  for (const entry of itemsArray) {
+    const productId = Number(
+      entry?.product_id ??
+        entry?.productId ??
+        entry?.id ??
+        entry?.product?.id ??
+        0
+    );
+    const skuId = Number(entry?.skuId ?? entry?.sku_id ?? entry?.id ?? 0);
+    if (!Number.isFinite(productId) || productId <= 0) continue;
+    if (!Number.isFinite(skuId) || skuId <= 0) continue;
+
+    const needPriceRaw = Number(entry?.needPrice ?? entry?.price ?? 0);
+    if (!Number.isFinite(needPriceRaw) || needPriceRaw <= 0) continue;
+    const needPrice = Math.trunc(needPriceRaw);
+    if (needPrice % 10 !== 0) {
+      console.warn(
+        `Warning: price ${needPrice} for SKU ${skuId} is not multiple of 10, rounding down.`
+      );
+      continue;
+    }
+
+    const skuTitle = (entry?.sku_title ?? entry?.skuTitle ?? "")
+      .toString()
+      .trim();
+
+    const key = Math.trunc(productId);
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        productId: key,
+        skuList: [],
+      });
+    }
+
+    grouped.get(key).skuList.push({
+      fullPrice: needPrice,
+      sellPrice: needPrice,
+      skuId: Math.trunc(skuId),
+      skuTitle,
+    });
+  }
+
+  const payloadList = Array.from(grouped.values()).filter(
+    (payload) => Array.isArray(payload.skuList) && payload.skuList.length > 0
+  );
+
+  if (!payloadList.length) {
+    return null;
+  }
+
+  // return payloadList
+  try {
+    const responses = [];
+    for (const payload of payloadList) {
+      const response = await axios.post(
+        `${UZUM_URL}/v1/product/${shop_id}/sendPriceData`,
+        payload,
+        {
+          headers: {
+            Authorization: uzumSecretKey,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      responses.push(response.data);
+
+      console.log("res", JSON.stringify(payload).slice(0, 20));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return responses;
+  } catch (error) {
+    // console.error("Failed to change Uzum product prices:", error.response?.data || error);
+    throw error;
   }
 }

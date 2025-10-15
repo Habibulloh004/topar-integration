@@ -241,7 +241,9 @@ export function mergeProducts(billzProducts, yandexProducts, yandexQuantity) {
 
   // ---------- Yandex → Billz moslash
   const yMappings = extractYandexMappings(yandexProducts);
-  const TARGET_SHOP = "TOPAR.UZ";
+  const TARGET_SHOP = "topar.uz";
+  const isTargetShop = (name) =>
+    (name ?? "").toString().toLowerCase().includes(TARGET_SHOP);
   const merged = [];
 
   for (const y of yMappings) {
@@ -268,12 +270,17 @@ export function mergeProducts(billzProducts, yandexProducts, yandexQuantity) {
     if (matchedBillz) {
       if (Array.isArray(matchedBillz.shop_measurement_values)) {
         billzCount = matchedBillz.shop_measurement_values
-          .filter((v) => (v?.shop_name || "").trim() === TARGET_SHOP)
-          .reduce((sum, v) => sum + Number(v?.active_measurement_value ?? 0), 0);
+          .filter((v) => isTargetShop(v?.shop_name))
+          .reduce((sum, v) => {
+            const value = Number(
+              v?.active_measurement_value ?? v?.activeMeasurementValue ?? 0
+            );
+            return Number.isFinite(value) ? sum + value : sum;
+          }, 0);
       }
       if (Array.isArray(matchedBillz.shop_prices)) {
-        const toparOnly = matchedBillz.shop_prices.filter(
-          (x) => (x?.shop_name || "").trim() === TARGET_SHOP
+        const toparOnly = matchedBillz.shop_prices.filter((x) =>
+          isTargetShop(x?.shop_name)
         );
         const pick = toparOnly.find((x) => x?.retail_price != null) ?? toparOnly[0];
         billzPrice = Number(pick?.retail_price ?? 0);
@@ -309,8 +316,68 @@ export function mergeProducts(billzProducts, yandexProducts, yandexQuantity) {
   return merged;
 }
 
-export function mergeWithUzumProducts(uzumProducts, products) {
-  
+export function mergeWithUzumProducts(billzProducts, syncProducts) {
+  const result = [];
+  const TARGET_SHOP = "topar.uz";
+
+  const billzByBarcode = new Map();
+  for (const product of Array.isArray(billzProducts) ? billzProducts : []) {
+    const barcodeRaw = product?.barcode ?? product?.barcode_billz ?? null;
+    if (barcodeRaw == null) continue;
+    const barcode = String(barcodeRaw).trim();
+    if (!barcode) continue;
+
+    const measurementValues = Array.isArray(product?.shop_measurement_values)
+      ? product.shop_measurement_values
+      : [];
+    const toparMeasurements = measurementValues.filter((entry) => {
+      const name = (entry?.shop_name ?? "").toString().toLowerCase();
+      return name.includes(TARGET_SHOP);
+    });
+    const needAmount = toparMeasurements.reduce((total, entry) => {
+      const value = Number(entry?.active_measurement_value ?? entry?.activeMeasurementValue ?? 0);
+      return Number.isFinite(value) ? total + value : total;
+    }, 0);
+
+    const priceEntries = Array.isArray(product?.shop_prices) ? product.shop_prices : [];
+    const needPrice = (() => {
+      for (const entry of priceEntries) {
+        const name = (entry?.shop_name ?? "").toString().toLowerCase();
+        if (!name.includes(TARGET_SHOP)) continue;
+        const retailPrice = Number(entry?.retail_price ?? entry?.retailPrice ?? 0);
+        if (Number.isFinite(retailPrice) && retailPrice > 0) {
+          return retailPrice;
+        }
+      }
+      return null;
+    })();
+
+    billzByBarcode.set(barcode, { needAmount, needPrice });
+  }
+
+  for (const syncItem of Array.isArray(syncProducts) ? syncProducts : []) {
+    const barcodeRaw =
+      syncItem?.barcode_uzum
+    const barcode = barcodeRaw != null ? String(barcodeRaw).trim() : "";
+    const matched = barcode ? billzByBarcode.get(barcode) : undefined;
+
+    
+    if (matched) {
+      result.push({
+        ...syncItem,
+        needAmount: matched.needAmount ?? 0,
+        needPrice: matched.needPrice,
+      });
+    } else {
+      result.push({
+        ...syncItem,
+        needAmount: 0,
+        needPrice: null,
+      });
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -389,3 +456,25 @@ export function splitDifferences(items, opts = {}) {
 
   return { countDiffs, priceDiffs };
 }
+
+export function splitDifferencesUzum(items) {
+  const quantityDiffs = [];
+  const priceDiffs = [];
+
+  for (const item of Array.isArray(items) ? items : []) {
+    const amount = Number(item?.amount ?? 0);
+    const needAmount = Number(item?.needAmount ?? 0);
+    if (Number.isFinite(amount) && Number.isFinite(needAmount) && amount !== needAmount) {
+      quantityDiffs.push(item);
+    }
+
+    const price = Number(item?.price ?? 0);
+    const needPrice = Number(item?.needPrice ?? 0);
+    if (Number.isFinite(price) && Number.isFinite(needPrice) && price !== needPrice) {
+      priceDiffs.push(item);
+    }
+  }
+
+  return { quantityDiffs, priceDiffs };
+}
+
