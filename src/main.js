@@ -222,7 +222,7 @@ async function runUzumLoop() {
   }
 }
 
-// scheduleYandexLoop(0);
+scheduleYandexLoop(0);
 scheduleUzumLoop(0);
 
 const PORT = Number(process.env.PORT || 3000);

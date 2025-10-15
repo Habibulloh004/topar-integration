@@ -1,7 +1,9 @@
 version: '3.8'
 
 services:
+  # ========================
   # MongoDB Database
+  # ========================
   mongodb:
     image: mongo:7-jammy
     container_name: topar-mongodb
@@ -20,10 +22,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.40'      # 40% of 1 vCPU
+          memory: 400M      # MongoDB gets 400 MB RAM
+        reservations:
+          cpus: '0.20'
+          memory: 256M
     networks:
       - topar-network
 
+  # ========================
   # Node.js Application
+  # ========================
   app:
     build:
       context: .
@@ -49,14 +61,23 @@ services:
       mongodb:
         condition: service_healthy
     volumes:
-      # For development: mount source code
       - ./src:/app/src
       - ./package.json:/app/package.json
+    deploy:
+      resources:
+        limits:
+          cpus: '0.40'      # 40% of CPU
+          memory: 350M      # Node gets 350 MB RAM
+        reservations:
+          cpus: '0.20'
+          memory: 256M
     networks:
       - topar-network
     command: npm start
 
-  # Development service (optional - use this for development)
+  # ========================
+  # Development Service
+  # ========================
   app-dev:
     build:
       context: .
@@ -84,13 +105,20 @@ services:
       - ./src:/app/src
       - ./package.json:/app/package.json
       - /app/node_modules
+    deploy:
+      resources:
+        limits:
+          cpus: '0.40'
+          memory: 350M
     networks:
       - topar-network
     command: npm run dev
     profiles:
       - dev
 
-  # Mongo Express (optional - for database management UI)
+  # ========================
+  # Mongo Express (optional)
+  # ========================
   mongo-express:
     image: mongo-express:latest
     container_name: topar-mongo-express
@@ -105,11 +133,19 @@ services:
       - "8081:8081"
     depends_on:
       - mongodb
+    deploy:
+      resources:
+        limits:
+          cpus: '0.20'      # Light limit for UI
+          memory: 150M
     networks:
       - topar-network
     profiles:
       - dev
 
+# ========================
+# Volumes & Networks
+# ========================
 volumes:
   mongodb_data:
     driver: local
