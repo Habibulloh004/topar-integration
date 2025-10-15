@@ -103,12 +103,6 @@ async function runBillzAndUzum(database, sourceBillzProducts) {
   const syncProduct = [...collectComparison.both, ...existingBillzLinked];
   const mergeProds = mergeWithUzumProducts(billzList, syncProduct);
   const divideForTopic = splitDifferencesUzum(mergeProds);
-  app.get("/merge", (req, res) => {
-    res.json(mergeProds);
-  });
-  app.get("/divide", (req, res) => {
-    res.json(divideForTopic);
-  });
 
   const syncUzumCount = await changeUzumProductCount(
     divideForTopic.quantityDiffs
