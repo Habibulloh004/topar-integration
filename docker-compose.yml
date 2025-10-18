@@ -136,8 +136,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.20'      # Light limit for UI
-          memory: 150M
+          cpus: '0.50'      # Light limit for UI
+          memory: 500M
     networks:
       - topar-network
     profiles:

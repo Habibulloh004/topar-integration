@@ -160,21 +160,12 @@ async function runBillzAndYandex(sourceBillzProducts) {
   };
 }
 
-// Run both sync flows independently, retrying 10 minutes after each completion.
-const RETRY_DELAY_MS = 10 * 60 * 1000;
+const SEQUENCE_DELAY_MS = 2 * 60 * 1000;
 
-let yandexTimerId = null;
 let isYandexRunning = false;
-function scheduleYandexLoop(delay = RETRY_DELAY_MS) {
-  if (yandexTimerId) {
-    clearTimeout(yandexTimerId);
-  }
-  yandexTimerId = setTimeout(runYandexLoop, delay);
-}
-async function runYandexLoop() {
+async function executeYandexSync() {
   if (isYandexRunning) {
     console.warn("Billz ↔ Yandex sync already running; skipping new start.");
-    scheduleYandexLoop(RETRY_DELAY_MS);
     return;
   }
   isYandexRunning = true;
@@ -187,22 +178,13 @@ async function runYandexLoop() {
     console.error("Billz ↔ Yandex sync failed:", err);
   } finally {
     isYandexRunning = false;
-    scheduleYandexLoop(RETRY_DELAY_MS);
   }
 }
 
-let uzumTimerId = null;
 let isUzumRunning = false;
-function scheduleUzumLoop(delay = RETRY_DELAY_MS) {
-  if (uzumTimerId) {
-    clearTimeout(uzumTimerId);
-  }
-  uzumTimerId = setTimeout(runUzumLoop, delay);
-}
-async function runUzumLoop() {
+async function executeUzumSync() {
   if (isUzumRunning) {
     console.warn("Billz ↔ Uzum sync already running; skipping new start.");
-    scheduleUzumLoop(RETRY_DELAY_MS);
     return;
   }
   isUzumRunning = true;
@@ -218,12 +200,39 @@ async function runUzumLoop() {
     console.error("Billz ↔ Uzum sync failed:", err);
   } finally {
     isUzumRunning = false;
-    scheduleUzumLoop(RETRY_DELAY_MS);
   }
 }
 
-scheduleYandexLoop(0);
-scheduleUzumLoop(0);
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function runSequentialSyncs() {
+  let next = "yandex";
+  // Loop forever so long as the process is alive.
+  // If an iteration fails we still proceed after the delay.
+  for (;;) {
+    if (next === "yandex") {
+      await executeYandexSync();
+      next = "uzum";
+    } else {
+      await executeUzumSync();
+      next = "yandex";
+    }
+    console.log(
+      `Waiting ${
+        SEQUENCE_DELAY_MS / 1000 / 60
+      } minutes before the next sync (${next}).`
+    );
+    await delay(SEQUENCE_DELAY_MS);
+  }
+}
+
+runSequentialSyncs().catch((err) => {
+  console.error("Sequential sync loop terminated unexpectedly:", err);
+});
 
 const PORT = Number(process.env.PORT || 3000);
 app.listen(3001, () => {
