@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # ========================
@@ -16,7 +16,6 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-      # - ./init-db.js:/docker-entrypoint-initdb.d/01-init.js:ro
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -25,16 +24,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.40'      # 40% of 1 vCPU
-          memory: 400M      # MongoDB gets 400 MB RAM
-        reservations:
-          cpus: '0.20'
-          memory: 256M
+          cpus: "0.4"
+          memory: 700m
     networks:
       - topar-network
 
   # ========================
-  # Node.js Application
+  # Node.js Application (Production)
   # ========================
   app:
     build:
@@ -48,7 +44,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      # MongoDB connection
       MONGODB_URI: mongodb://topar_admin:topar_password_2024@mongodb:27017/topar_db?authSource=admin
       MONGODB_HOST: mongodb
       MONGODB_PORT: 27017
@@ -63,20 +58,18 @@ services:
     volumes:
       - ./src:/app/src
       - ./package.json:/app/package.json
+    # Node.js uchun 768 MB heap limiti (1 GB konteyner RAM ichida optimal)
+    command: node --max-old-space-size=768 src/main.js
     deploy:
       resources:
         limits:
-          cpus: '0.40'      # 40% of CPU
-          memory: 350M      # Node gets 350 MB RAM
-        reservations:
-          cpus: '0.20'
-          memory: 256M
+          cpus: "0.5"
+          memory: 1g
     networks:
       - topar-network
-    command: npm start
 
   # ========================
-  # Development Service
+  # Node.js Application (Development)
   # ========================
   app-dev:
     build:
@@ -105,19 +98,19 @@ services:
       - ./src:/app/src
       - ./package.json:/app/package.json
       - /app/node_modules
+    command: npm run dev
     deploy:
       resources:
         limits:
-          cpus: '0.40'
-          memory: 350M
+          cpus: "0.3"
+          memory: 500m
     networks:
       - topar-network
-    command: npm run dev
     profiles:
       - dev
 
   # ========================
-  # Mongo Express (optional)
+  # Mongo Express (for debugging)
   # ========================
   mongo-express:
     image: mongo-express:latest
@@ -136,8 +129,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.50'      # Light limit for UI
-          memory: 500M
+          cpus: "0.1"
+          memory: 150m
     networks:
       - topar-network
     profiles:

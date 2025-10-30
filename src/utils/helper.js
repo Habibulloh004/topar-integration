@@ -241,7 +241,7 @@ export function mergeProducts(billzProducts, yandexProducts, yandexQuantity) {
 
   // ---------- Yandex → Billz moslash
   const yMappings = extractYandexMappings(yandexProducts);
-  const TARGET_SHOP = "topar.uz";
+  const TARGET_SHOP = "topar";
   const isTargetShop = (name) =>
     (name ?? "").toString().toLowerCase().includes(TARGET_SHOP);
   const merged = [];
@@ -318,7 +318,7 @@ export function mergeProducts(billzProducts, yandexProducts, yandexQuantity) {
 
 export function mergeWithUzumProducts(billzProducts, syncProducts) {
   const result = [];
-  const TARGET_SHOP = "topar.uz";
+  const TARGET_SHOP = "topar";
 
   const billzByBarcode = new Map();
   for (const product of Array.isArray(billzProducts) ? billzProducts : []) {
@@ -477,4 +477,3 @@ export function splitDifferencesUzum(items) {
 
   return { quantityDiffs, priceDiffs };
 }
-

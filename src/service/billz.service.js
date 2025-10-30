@@ -91,16 +91,26 @@ export async function deleteDuplicates() {
       uniqueProducts.push(group[0]);
       continue;
     }
-    // Eng katta active_measurement_value ni topamiz
+    // Eng katta active_measurement_value ni topamiz (faqat TOPAR do'konlari bo'yicha)
     let maxIdx = 0;
     let maxValue = -Infinity;
     for (let i = 0; i < group.length; i++) {
       const prod = group[i];
       let val = 0;
       if (Array.isArray(prod.shop_measurement_values)) {
-        val = Math.max(
-          ...prod.shop_measurement_values.map(smv => smv.active_measurement_value || 0)
+        const isTargetShop = (name) =>
+          (name ?? "").toString().toLowerCase().includes("topar");
+        const relevant = prod.shop_measurement_values.filter((smv) =>
+          isTargetShop(smv?.shop_name)
         );
+        if (relevant.length > 0) {
+          const values = relevant.map((smv) =>
+            Number(smv?.active_measurement_value ?? smv?.activeMeasurementValue ?? 0)
+          );
+          val = Math.max(...values);
+        } else {
+          val = 0;
+        }
       }
       if (val > maxValue) {
         maxValue = val;
